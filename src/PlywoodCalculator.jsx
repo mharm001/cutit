@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 
 const SHEET_W = 96;
 const SHEET_H = 48;
-const KERF = 0.125;
+const DEFAULT_KERF = 0.125;
 
 // ─── Fraction helpers (1/16 for dims, 1/64 for thickness) ───
 const FRACS16 = Array.from({ length: 16 }, (_, i) => i / 16);
@@ -92,9 +92,7 @@ function stripPack(panels, sheetW, sheetH, kerf, preSheets = []) {
       const sW = sheet.maxW || sheetW;
       const sH = sheet.maxH || sheetH;
       const gap = sheet.strips.length > 0 ? kerf : 0;
-      // Allow strip to fit if it's within kerf tolerance of sheet height
-      // (last strip loses kerf from its rip dimension in practice)
-      if (strip.usedLen <= sW && sheet.usedH + gap + strip.ripDim <= sH + kerf) {
+      if (strip.usedLen <= sW && sheet.usedH + gap + strip.ripDim <= sH) {
         sheet.strips.push({ ...strip, y: sheet.usedH + gap });
         sheet.usedH += gap + strip.ripDim;
         placed = true;
@@ -135,7 +133,7 @@ function collectWaste(sheets, sheetW, sheetH) {
 }
 
 // ─── Panel generation (multi-group, always pocket hole) ───
-function generatePanelList({ cabGroups, fullTop, fullBack, backStockT, stringerTopW, stringerBackW, stockT }) {
+function generatePanelList({ cabGroups, fullTop, fullBack, fullBackCov, backStockT, stringerTopW, stringerBackW, stockT, kerf }) {
   const panels = [];
   const isInset = backStockT >= 0.7; // only 3/4" backs are inset
 
@@ -166,7 +164,8 @@ function generatePanelList({ cabGroups, fullTop, fullBack, backStockT, stringerT
 
       if (fullBack) {
         const backW = rd16(isInset ? cabinetW - 2 * stockT : cabinetW);
-        const backH = rd16(spaceH);
+        // fullBackCov: exact height; otherwise split the kerf difference to allow 2 strips per sheet
+        const backH = fullBackCov ? rd16(spaceH) : rd16(spaceH - kerf / 2);
         panels.push({ ripDim: backH, crossDim: backW, label: `${c}-Bk`, type: "back", thickness: backStockT, cab: c, inset: isInset });
       } else {
         panels.push({ ripDim: rd16(stringerBackW), crossDim: tbW, label: `${c}-BST`, type: "stringer", thickness: stockT, cab: c });
@@ -686,8 +685,10 @@ const DEFAULT_PROJECT = {
   cabGroups: [{ id: 1, w: 60, h: 24, d: 23.5, qty: 3, mult: 1 }],
   stockT: 45 / 64,
   backStockT: 1 / 4,
+  kerf: DEFAULT_KERF,
   fullTop: false,
   fullBack: false,
+  fullBackCov: false,
   stringerTopW: 4,
   stringerBackW: 4,
   useScrap: false,
@@ -715,8 +716,10 @@ export default function PlywoodCalculator() {
   ]);
   const [stockT, setStockT] = useState(45 / 64);
   const [backStockT, setBackStockT] = useState(1 / 4);
+  const [kerf, setKerf] = useState(DEFAULT_KERF);
   const [fullTop, setFullTop] = useState(false);
   const [fullBack, setFullBack] = useState(false);
+  const [fullBackCov, setFullBackCov] = useState(false);
   const [stringerTopW, setStringerTopW] = useState(4);
   const [stringerBackW, setStringerBackW] = useState(4);
   const [useScrap, setUseScrap] = useState(false);
@@ -728,8 +731,8 @@ export default function PlywoodCalculator() {
   useEffect(() => { saveProjects(projects); }, [projects]);
 
   const getProjectState = () => ({
-    name: projectName, cabGroups, stockT, backStockT,
-    fullTop, fullBack, stringerTopW, stringerBackW, useScrap, scrapInventory,
+    name: projectName, cabGroups, stockT, backStockT, kerf,
+    fullTop, fullBack, fullBackCov, stringerTopW, stringerBackW, useScrap, scrapInventory,
   });
 
   const applyProject = (proj) => {
@@ -737,8 +740,10 @@ export default function PlywoodCalculator() {
     setCabGroups(proj.cabGroups || DEFAULT_PROJECT.cabGroups);
     setStockT(proj.stockT ?? DEFAULT_PROJECT.stockT);
     setBackStockT(proj.backStockT ?? DEFAULT_PROJECT.backStockT);
+    setKerf(proj.kerf ?? DEFAULT_KERF);
     setFullTop(proj.fullTop ?? false);
     setFullBack(proj.fullBack ?? false);
+    setFullBackCov(proj.fullBackCov ?? false);
     setStringerTopW(proj.stringerTopW ?? 4);
     setStringerBackW(proj.stringerBackW ?? 4);
     setUseScrap(proj.useScrap ?? false);
@@ -778,8 +783,8 @@ export default function PlywoodCalculator() {
   const totalCabinets = cabGroups.reduce((a, g) => a + (g.qty || 1) * (g.mult || 1), 0);
 
   const panels = useMemo(() => generatePanelList({
-    cabGroups, fullTop, fullBack, backStockT, stringerTopW, stringerBackW, stockT,
-  }), [cabGroups, fullTop, fullBack, backStockT, stringerTopW, stringerBackW, stockT]);
+    cabGroups, fullTop, fullBack, fullBackCov, backStockT, stringerTopW, stringerBackW, stockT, kerf,
+  }), [cabGroups, fullTop, fullBack, fullBackCov, backStockT, stringerTopW, stringerBackW, stockT, kerf]);
 
   const thickGroups = useMemo(() => {
     const g = {};
@@ -791,10 +796,10 @@ export default function PlywoodCalculator() {
     const result = {};
     for (const [thick, pnls] of Object.entries(thickGroups)) {
       const scrap = useScrap ? scrapInventory.filter(() => true) : [];
-      result[thick] = stripPack(pnls, SHEET_W, SHEET_H, KERF, scrap);
+      result[thick] = stripPack(pnls, SHEET_W, SHEET_H, kerf, scrap);
     }
     return result;
-  }, [thickGroups, useScrap, scrapInventory]);
+  }, [thickGroups, useScrap, scrapInventory, kerf]);
 
   const allSheets = useMemo(() => Object.entries(packedByThick).flatMap(([thick, sheets]) => sheets.map((s) => ({ ...s, thickness: parseFloat(thick) }))), [packedByThick]);
   const allWaste = useMemo(() => collectWaste(allSheets, SHEET_W, SHEET_H), [allSheets]);
@@ -871,10 +876,11 @@ export default function PlywoodCalculator() {
 
         {/* Input Form */}
         <div className="no-print" style={{ background: cardBg, borderRadius: 8, padding: 20, marginBottom: 28, border: isPrintMode ? "1px solid #ddd" : "1px solid #1a3a5c" }}>
-          {/* Row 1: Stock thickness */}
+          {/* Row 1: Stock thickness + kerf */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-end", marginBottom: 14 }}>
             <FracInput64 value={stockT} onChange={setStockT} label="Cabinet Stock (actual)" theme={theme} />
             <FracInput64 value={backStockT} onChange={setBackStockT} label="Back Stock (actual)" theme={theme} />
+            <FracInput64 value={kerf} onChange={setKerf} label="Kerf" theme={theme} />
           </div>
 
           {/* Cabinet groups */}
@@ -893,9 +899,17 @@ export default function PlywoodCalculator() {
             <Toggle value={fullTop} onChange={setFullTop} label="Full Top" theme={theme} />
             <Toggle value={fullBack} onChange={setFullBack} label="Full Back" theme={theme} />
             {fullBack && (
-              <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>
-                {fmtRaw(backStockT)} {backStockT >= 0.7 ? "(inset)" : "(outside)"}
-              </span>
+              <>
+                <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>
+                  {fmtRaw(backStockT)} {backStockT >= 0.7 ? "(inset)" : "(outside)"}
+                </span>
+                <Toggle value={fullBackCov} onChange={setFullBackCov} label="Full Coverage" theme={theme} />
+                {!fullBackCov && (
+                  <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>
+                    back H: {fmtDim(rd16(cabGroups[0]?.h - kerf / 2))}
+                  </span>
+                )}
+              </>
             )}
             <Toggle value={useScrap} onChange={setUseScrap} label="Use Scrap" theme={theme} />
           </div>
@@ -956,7 +970,7 @@ export default function PlywoodCalculator() {
                     <div><span style={{ color: isPrintMode ? "#2a6db5" : "#6ab0ff" }}>Side</span> {fd(boxD)} × {fd(grp.h)}</div>
                     <div><span style={{ color: isPrintMode ? "#2d8a48" : "#70d88c" }}>{fullTop ? "Top/Bot" : "Bot"}</span> {fd(tbW)} × {fd(boxD)}</div>
                     {!fullTop && <div><span style={{ color: isPrintMode ? "#7050a0" : "#c090f0" }}>Top Str</span> {fd(tbW)} × {fd(stringerTopW)} ×2</div>}
-                    {fullBack && <div><span style={{ color: isPrintMode ? "#9a7520" : "#e0c060" }}>Back</span> {fd(isInset ? tbW : cabW)} × {fd(grp.h)}</div>}
+                    {fullBack && <div><span style={{ color: isPrintMode ? "#9a7520" : "#e0c060" }}>Back</span> {fd(isInset ? tbW : cabW)} × {fd(fullBackCov ? grp.h : rd16(grp.h - kerf / 2))}</div>}
                     {!fullBack && <div><span style={{ color: isPrintMode ? "#7050a0" : "#c090f0" }}>Back Str</span> {fd(tbW)} × {fd(stringerBackW)} ×2</div>}
                   </div>
                 </div>
