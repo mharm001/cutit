@@ -1,0 +1,31 @@
+{
+  "name": "Plywood Cut Calculator",
+  "short_name": "CutIt",
+  "description": "Plywood cut optimizer for cabinet construction",
+  "start_url": "/cutit/",
+  "scope": "/cutit/",
+  "display": "standalone",
+  "background_color": "#0a1929",
+  "theme_color": "#0a1929",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -401,10 +401,22 @@ function CrosscutStep({ strip, stripLabel, scale, theme, identicalCount }) {
               {strip.panels.length}× {f(strip.panels[0].crossDim)} ea
             </text>
           )}
-          {wasteLen > 0.5 && (<g>
-            <rect x={usedW*scale} y={0} width={(showW-usedW)*scale} height={stripH} fill={wasteFill} stroke={waste} strokeWidth={0.5} strokeDasharray="4,3" />
-            <text x={(usedW*scale + stripW)/2} y={stripH/2} textAnchor="middle" dominantBaseline="middle" fill={wasteText} fontSize={8} fontFamily={fontFam}>{f(wasteLen)}</text>
-          </g>)}
+          {wasteLen > 0.5 && (() => {
+            const wastePixels = (showW - usedW) * scale;
+            const wx = usedW * scale;
+            const wcx = wx + wastePixels / 2;
+            const wcy = stripH / 2;
+            const wasteNarrow = wastePixels < 40;
+            return (<g>
+              <rect x={wx} y={0} width={wastePixels} height={stripH} fill={wasteFill} stroke={waste} strokeWidth={0.5} strokeDasharray="4,3" />
+              {wasteNarrow ? (
+                <text x={wcx} y={wcy} textAnchor="middle" dominantBaseline="middle" fill={wasteText} fontSize={7} fontFamily={fontFam}
+                  transform={`rotate(-90, ${wcx}, ${wcy})`}>{f(wasteLen)}</text>
+              ) : (
+                <text x={wcx} y={wcy} textAnchor="middle" dominantBaseline="middle" fill={wasteText} fontSize={8} fontFamily={fontFam}>{f(wasteLen)}</text>
+              )}
+            </g>);
+          })()}
           <VDim x={0} y1={0} y2={stripH} label={f(strip.ripDim)} color={dim} fontFam={fontFam} right={false} />
           <HDim x1={0} x2={stripW} y={stripH} label={`${f(usedW)} of ${f(SHEET_W)}`} color={dim} fontFam={fontFam} />
         </g>
