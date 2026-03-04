@@ -34,8 +34,28 @@ function toFrac16(dec) {
 // Round DOWN to nearest 1/16 for cut dimensions
 function rd16(v) { return Math.floor(v * 16) / 16; }
 function fmtDim(inches) { return `${toFrac16(rd16(inches))}"`; }
-// Format raw (no rounding) for inputs/labels
-function fmtRaw(inches) { return `${toFrac16(inches)}"`; }
+// Format raw (no rounding) for inputs/labels — uses best-fit denominator up to 64ths
+function fmtRaw(inches) {
+  const whole = Math.floor(inches);
+  const rem = inches - whole;
+  if (rem < 1/128) return `${whole}"`;
+  for (const d of [2, 4, 8, 16, 32, 64]) {
+    const n = Math.round(rem * d);
+    if (Math.abs(rem - n / d) < 1/128) {
+      let nn = n, dd = d;
+      while (nn % 2 === 0 && dd > 1) { nn /= 2; dd /= 2; }
+      return whole > 0 ? `${whole}-${nn}/${dd}"` : `${nn}/${dd}"`;
+    }
+  }
+  return `${toFrac16(inches)}"`;
+}
+// Map actual plywood thickness to standard nominal size label
+function nominalSize(t) {
+  if (Math.abs(t - 0.25) < 0.05) return '1/4"';
+  if (Math.abs(t - 0.5) < 0.05) return '1/2"';
+  if (Math.abs(t - 0.75) < 0.1) return '3/4"'; // covers 23/32" (0.71875)
+  return fmtDim(t);
+}
 
 // ─── Strip packer ───
 const MAX_PANELS_PER_STRIP = 6;
@@ -72,7 +92,9 @@ function stripPack(panels, sheetW, sheetH, kerf, preSheets = []) {
       const sW = sheet.maxW || sheetW;
       const sH = sheet.maxH || sheetH;
       const gap = sheet.strips.length > 0 ? kerf : 0;
-      if (strip.usedLen <= sW && sheet.usedH + gap + strip.ripDim <= sH) {
+      // Allow strip to fit if it's within kerf tolerance of sheet height
+      // (last strip loses kerf from its rip dimension in practice)
+      if (strip.usedLen <= sW && sheet.usedH + gap + strip.ripDim <= sH + kerf) {
         sheet.strips.push({ ...strip, y: sheet.usedH + gap });
         sheet.usedH += gap + strip.ripDim;
         placed = true;
@@ -120,12 +142,15 @@ function generatePanelList({ cabGroups, fullTop, fullBack, backStockT, stringerT
   for (let gi = 0; gi < cabGroups.length; gi++) {
     const grp = cabGroups[gi];
     const grpLabel = String.fromCharCode(65 + gi); // A, B, C...
-    const { w: cabinetW, h: spaceH, d: depth, qty } = grp;
+    const { w: spaceW, h: spaceH, d: depth, qty, mult = 1 } = grp;
+    const divide = qty || 1;
+    const totalCabs = divide * mult;
+    const cabinetW = rd16(spaceW / divide); // divide total space by number of cabinets
     const tbW = rd16(cabinetW - 2 * stockT); // pocket hole: top/bot sits between sides
     const boxDepth = rd16(fullBack && !isInset ? depth - backStockT : depth);
     const crossH = rd16(spaceH);
 
-    for (let i = 0; i < qty; i++) {
+    for (let i = 0; i < totalCabs; i++) {
       const c = `${grpLabel}${i + 1}`; // A1, A2, B1, B2...
 
       panels.push({ ripDim: boxDepth, crossDim: crossH, label: `${c}-SL`, type: "side", thickness: stockT, cab: c });
@@ -403,7 +428,7 @@ function SheetSteps({ sheet, sheetNum, sheetLabel, scale, theme }) {
   });
 
   return (
-    <div style={{ background: card, borderRadius: 8, padding: "12px 14px", marginBottom: 16, border: isBP ? "1px solid #1a3a5c" : "1px solid #ddd", pageBreakInside: "avoid" }}>
+    <div className="print-sheet" style={{ background: card, borderRadius: 8, padding: "12px 14px", marginBottom: 16, border: isBP ? "1px solid #1a3a5c" : "1px solid #ddd" }}>
       <h3 style={{ fontSize: 13, fontWeight: 700, color: heading, fontFamily: fontFam, margin: "0 0 8px" }}>
         {sheetLabel || `Sheet ${sheetNum}`}
         {sheet.isScrap && <span style={{ fontWeight: 400, fontSize: 11, color: theme.wasteText, marginLeft: 6 }}>(scrap: {sheet.scrapLabel})</span>}
@@ -477,7 +502,7 @@ function CutList({ panels, mode }) {
             <tr key={i}>
               <td style={tdS}>{typeLabels[r.type] || r.type}</td>
               <td style={tdS}>{f(r.crossDim)} × {f(r.ripDim)}</td>
-              <td style={tdS}>{fmtDim(r.thickness)}</td>
+              <td style={tdS}>{nominalSize(r.thickness)}</td>
               <td style={tdS}>{r.count}</td>
               <td style={tdS}>{((r.crossDim * r.ripDim * r.count) / 144).toFixed(2)}</td>
             </tr>
@@ -625,15 +650,27 @@ function CabGroupRow({ grp, groupLabel, onChange, onRemove, canRemove, theme }) 
   const labS = { fontSize: 11, color: isBP ? "#6a8aaa" : "#555", fontFamily: fontFam, display: "block", marginBottom: 3 };
   const set = (key, val) => onChange({ ...grp, [key]: val });
 
+  const smallInputS = { ...inputS, width: 40 };
+  const hintS = { fontSize: 9, color: isBP ? "#4a6a8a" : "#999", fontFamily: fontFam, marginTop: 2 };
+  const divide = grp.qty || 1;
+  const mult = grp.mult || 1;
+
   return (
     <div style={rowS}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 4, background: isBP ? "#1a3a5c" : "#ddd", color: isBP ? "#6ab0ff" : "#333", fontSize: 14, fontWeight: 700, fontFamily: fontFam, alignSelf: "flex-end", marginBottom: 2 }}>{groupLabel}</div>
-      <FracInput value={grp.w} onChange={(v) => set("w", v)} label="Width" theme={theme} min={1} />
+      <FracInput value={grp.w} onChange={(v) => set("w", v)} label="Space W" theme={theme} min={1} />
       <FracInput value={grp.h} onChange={(v) => set("h", v)} label="Height" theme={theme} min={1} />
       <FracInput value={grp.d} onChange={(v) => set("d", v)} label="Depth" theme={theme} min={1} />
       <div>
-        <label style={labS}>Qty</label>
-        <input type="number" value={grp.qty} onChange={(e) => set("qty", Math.max(1, +e.target.value))} style={inputS} min={1} max={50} />
+        <label style={labS}>÷ Cabs</label>
+        <input type="number" value={divide} onChange={(e) => set("qty", Math.max(1, +e.target.value))} style={smallInputS} min={1} max={50} />
+      </div>
+      <div>
+        <label style={labS}>× Sets</label>
+        <input type="number" value={mult} onChange={(e) => set("mult", Math.max(1, +e.target.value))} style={smallInputS} min={1} max={20} />
+      </div>
+      <div style={{ alignSelf: "flex-end", marginBottom: 4 }}>
+        <span style={hintS}>= {divide * mult} cabs</span>
       </div>
       {canRemove && (
         <button onClick={onRemove} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, background: "none", border: `1px solid ${wasteText}`, borderRadius: 4, color: wasteText, cursor: "pointer", fontFamily: fontFam, alignSelf: "flex-end" }}>Remove</button>
@@ -646,8 +683,8 @@ function CabGroupRow({ grp, groupLabel, onChange, onRemove, canRemove, theme }) 
 const STORAGE_KEY = "plycalc_projects";
 const DEFAULT_PROJECT = {
   name: "Untitled",
-  cabGroups: [{ id: 1, w: 10, h: 24, d: 23.5, qty: 6 }],
-  stockT: 23 / 32,
+  cabGroups: [{ id: 1, w: 60, h: 24, d: 23.5, qty: 3, mult: 1 }],
+  stockT: 45 / 64,
   backStockT: 1 / 4,
   fullTop: false,
   fullBack: false,
@@ -674,9 +711,9 @@ export default function PlywoodCalculator() {
   const [activeId, setActiveId] = useState(null); // null = unsaved new project
   const [projectName, setProjectName] = useState("Untitled");
   const [cabGroups, setCabGroups] = useState([
-    { id: 1, w: 10, h: 24, d: 23.5, qty: 6 },
+    { id: 1, w: 60, h: 24, d: 23.5, qty: 3, mult: 1 },
   ]);
-  const [stockT, setStockT] = useState(23 / 32);
+  const [stockT, setStockT] = useState(45 / 64);
   const [backStockT, setBackStockT] = useState(1 / 4);
   const [fullTop, setFullTop] = useState(false);
   const [fullBack, setFullBack] = useState(false);
@@ -736,9 +773,9 @@ export default function PlywoodCalculator() {
 
   const updateGroup = (id, grp) => setCabGroups((gs) => gs.map((g) => g.id === id ? grp : g));
   const removeGroup = (id) => setCabGroups((gs) => gs.filter((g) => g.id !== id));
-  const addGroup = () => setCabGroups((gs) => [...gs, { id: Date.now(), w: 10, h: 24, d: 23.5, qty: 1 }]);
+  const addGroup = () => setCabGroups((gs) => [...gs, { id: Date.now(), w: 30, h: 24, d: 23.5, qty: 3, mult: 1 }]);
 
-  const totalCabinets = cabGroups.reduce((a, g) => a + g.qty, 0);
+  const totalCabinets = cabGroups.reduce((a, g) => a + (g.qty || 1) * (g.mult || 1), 0);
 
   const panels = useMemo(() => generatePanelList({
     cabGroups, fullTop, fullBack, backStockT, stringerTopW, stringerBackW, stockT,
@@ -783,15 +820,11 @@ export default function PlywoodCalculator() {
 
   const isInset = backStockT >= 0.7;
 
-  const thickLabel = (t) => {
-    if (Math.abs(t - stockT) < 0.01) return fmtDim(stockT);
-    if (Math.abs(t - backStockT) < 0.01) return fmtDim(backStockT);
-    return fmtDim(t);
-  };
+  const thickLabel = (t) => nominalSize(t);
 
   return (
     <div ref={printRef} style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: bg, minHeight: "100vh", padding: "24px 20px", color: textColor }}>
-      <style>{`@media print { body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none !important; } } input[type=number]::-webkit-inner-spin-button { opacity: 1; }`}</style>
+      <style>{`@media print { body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none !important; } .print-section-break { page-break-before: always; } .print-sheet { break-inside: avoid; page-break-inside: avoid; } } input[type=number]::-webkit-inner-spin-button { opacity: 1; }`}</style>
 
       <div style={{ maxWidth: 960, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -875,44 +908,55 @@ export default function PlywoodCalculator() {
           )}
         </div>
 
-        {/* Summary Cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 28 }}>
-          {[
-            { label: "Cabinets", value: totalCabinets },
-            { label: `${thickLabel(stockT)} Sheets`, value: mainSheets.length },
-            ...(backSheets.length > 0 ? [{ label: `${thickLabel(backSheets[0]?.thickness)} Sheets`, value: backSheets.length }] : []),
-            { label: "Total Panels", value: panels.length },
-            { label: "Total Sq Ft", value: totalSqFt.toFixed(1) },
-            { label: "Scrap Used", value: scrapSheets.length },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background: cardBg, borderRadius: 6, padding: "14px 16px", border: isPrintMode ? "1px solid #ddd" : "1px solid #1a3a5c", textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: accentColor, fontFamily: fontFam }}>{value}</div>
-              <div style={{ fontSize: 11, color: isPrintMode ? "#777" : "#4a6a8a", fontFamily: fontFam, marginTop: 2 }}>{label}</div>
-            </div>
-          ))}
+        {/* Summary */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16, fontSize: 13, color: textColor, fontFamily: fontFam }}>
+          <span><strong style={{ color: accentColor }}>{totalCabinets}</strong> cabinets</span>
+          <span><strong style={{ color: accentColor }}>{panels.length}</strong> panels</span>
+          {scrapSheets.length > 0 && <span><strong style={{ color: accentColor }}>{scrapSheets.length}</strong> scrap used</span>}
+        </div>
+
+        {/* Shopping List */}
+        <div style={{ background: cardBg, borderRadius: 8, padding: "16px 20px", marginBottom: 28, border: isPrintMode ? "1px solid #ddd" : "1px solid #1a3a5c" }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: headingColor, fontFamily: fontFam, marginBottom: 12 }}>Shopping List</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: textColor, fontFamily: fontFam }}>
+              <input type="checkbox" style={{ width: 16, height: 16, accentColor: accentColor }} />
+              <span><strong>{mainSheets.length}×</strong> {thickLabel(stockT)} Plywood <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a" }}>(4×8 sheets)</span></span>
+            </label>
+            {backSheets.length > 0 && (
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: textColor, fontFamily: fontFam }}>
+                <input type="checkbox" style={{ width: 16, height: 16, accentColor: accentColor }} />
+                <span><strong>{backSheets.length}×</strong> {thickLabel(backSheets[0]?.thickness)} Plywood <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a" }}>(4×8 sheets)</span></span>
+              </label>
+            )}
+          </div>
         </div>
 
         {/* Cabinet Reference — per group */}
         <div style={{ background: cardBg, borderRadius: 8, padding: "16px 20px", marginBottom: 28, border: isPrintMode ? "1px solid #ddd" : "1px solid #1a3a5c" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: headingColor, fontFamily: fontFam }}>Cabinet Reference</div>
-            <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>Pocket hole · Stock: {fmtRaw(stockT)} · Back: {fmtRaw(backStockT)}{!isInset ? " (outside)" : " (inset)"}</span>
+            <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>Pocket hole · Stock: {nominalSize(stockT)} ({fmtRaw(stockT)}) · Back: {nominalSize(backStockT)} ({fmtRaw(backStockT)}){!isInset ? " (outside)" : " (inset)"}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: cabGroups.length === 1 ? "1fr" : "1fr 1fr", gap: 12 }}>
             {cabGroups.map((grp, gi) => {
               const gl = String.fromCharCode(65 + gi);
               const fd = fmtDim;
-              const tbW = rd16(grp.w - 2 * stockT);
+              const divide = grp.qty || 1;
+              const mult = grp.mult || 1;
+              const totalCabs = divide * mult;
+              const cabW = rd16(grp.w / divide);
+              const tbW = rd16(cabW - 2 * stockT);
               const boxD = rd16(fullBack && !isInset ? grp.d - backStockT : grp.d);
               return (
                 <div key={grp.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 12px", background: isPrintMode ? "#f8f8f8" : "#0a1525", borderRadius: 6, border: isPrintMode ? "1px solid #e0e0e0" : "1px solid #1a3a5c" }}>
-                  <CabinetReference isBP={!isPrintMode} depth={grp.d} spaceH={grp.h} cabinetW={grp.w} tbW={tbW} fontFam={fontFam} fullTop={fullTop} fullBack={fullBack} />
+                  <CabinetReference isBP={!isPrintMode} depth={grp.d} spaceH={grp.h} cabinetW={cabW} tbW={tbW} fontFam={fontFam} fullTop={fullTop} fullBack={fullBack} />
                   <div style={{ fontSize: 11, color: textColor, fontFamily: fontFam, lineHeight: 1.9 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: headingColor, fontFamily: fontFam, marginBottom: 4 }}>Group {gl} <span style={{ fontWeight: 400, fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a" }}>×{grp.qty}</span></div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: headingColor, fontFamily: fontFam, marginBottom: 4 }}>Group {gl} <span style={{ fontWeight: 400, fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a" }}>×{totalCabs}</span> <span style={{ fontWeight: 400, fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a" }}>({fd(cabW)} ea)</span></div>
                     <div><span style={{ color: isPrintMode ? "#2a6db5" : "#6ab0ff" }}>Side</span> {fd(boxD)} × {fd(grp.h)}</div>
                     <div><span style={{ color: isPrintMode ? "#2d8a48" : "#70d88c" }}>{fullTop ? "Top/Bot" : "Bot"}</span> {fd(tbW)} × {fd(boxD)}</div>
                     {!fullTop && <div><span style={{ color: isPrintMode ? "#7050a0" : "#c090f0" }}>Top Str</span> {fd(tbW)} × {fd(stringerTopW)} ×2</div>}
-                    {fullBack && <div><span style={{ color: isPrintMode ? "#9a7520" : "#e0c060" }}>Back</span> {fd(isInset ? tbW : grp.w)} × {fd(grp.h)}</div>}
+                    {fullBack && <div><span style={{ color: isPrintMode ? "#9a7520" : "#e0c060" }}>Back</span> {fd(isInset ? tbW : cabW)} × {fd(grp.h)}</div>}
                     {!fullBack && <div><span style={{ color: isPrintMode ? "#7050a0" : "#c090f0" }}>Back Str</span> {fd(tbW)} × {fd(stringerBackW)} ×2</div>}
                   </div>
                 </div>
@@ -937,7 +981,7 @@ export default function PlywoodCalculator() {
         )}
 
         {mainSheets.length > 0 && (
-          <div style={{ marginBottom: 32 }}>
+          <div className="print-section-break" style={{ marginBottom: 32 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: headingColor, fontFamily: fontFam, marginBottom: 4 }}>{thickLabel(stockT)} Plywood — Step-by-Step Cuts</h2>
             <p style={{ fontSize: 12, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam, marginBottom: 14 }}>
               Rip first (tracksaw), then crosscuts per strip (MFT). Dims rounded down to 1/16".
@@ -949,7 +993,7 @@ export default function PlywoodCalculator() {
         )}
 
         {backSheets.length > 0 && (
-          <div style={{ marginBottom: 32 }}>
+          <div className="print-section-break" style={{ marginBottom: 32 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: headingColor, fontFamily: fontFam, marginBottom: 4 }}>
               {thickLabel(backSheets[0]?.thickness)} Plywood — Back Panels
             </h2>
