@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 const SHEET_W = 96;
 const SHEET_H = 48;
 const DEFAULT_KERF = 0.125;
+const APP_VERSION = "1.0.0";
 const selectOnFocus = (e) => e.target.select();
 
 // ─── Fraction helpers (1/16 for dims, 1/64 for thickness) ───
@@ -1050,6 +1051,9 @@ export default function PlywoodCalculator() {
             </div>
           ))}
         </div>
+      </div>
+      <div className="no-print" style={{ textAlign: "center", padding: "24px 0 8px", fontSize: 11, color: isPrintMode ? "#aaa" : "#3a5a7a", fontFamily: fontFam }}>
+        CutIt v{APP_VERSION}
       </div>
     </div>
   );
