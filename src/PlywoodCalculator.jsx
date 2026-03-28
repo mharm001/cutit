@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 const SHEET_W = 96;
 const SHEET_H = 48;
 const DEFAULT_KERF = 0.125;
+const selectOnFocus = (e) => e.target.select();
 
 // ─── Fraction helpers (1/16 for dims, 1/64 for thickness) ───
 const FRACS16 = Array.from({ length: 16 }, (_, i) => i / 16);
@@ -583,9 +584,9 @@ function ScrapInventoryUI({ scrap, setScrap, waste, theme }) {
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 12, color: textColor, fontFamily: fontFam }}>Add:</span>
-        <input type="number" placeholder="W" value={addW} onChange={(e) => setAddW(e.target.value)} style={inputS} min={1} step={0.5} />
+        <input type="number" placeholder="W" value={addW} onChange={(e) => setAddW(e.target.value)} onFocus={selectOnFocus} style={inputS} min={1} step={0.5} />
         <span style={{ color: textColor }}>×</span>
-        <input type="number" placeholder="H" value={addH} onChange={(e) => setAddH(e.target.value)} style={inputS} min={1} step={0.5} />
+        <input type="number" placeholder="H" value={addH} onChange={(e) => setAddH(e.target.value)} onFocus={selectOnFocus} style={inputS} min={1} step={0.5} />
         <button onClick={addCustom} style={btnS}>Add</button>
       </div>
     </div>
@@ -605,7 +606,7 @@ function FracInput({ value, onChange, label, theme, min = 0, max = 200 }) {
     <div>
       <label style={labS}>{label}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <input type="number" value={whole} onChange={(e) => set(Math.max(0, +e.target.value), fi)} style={inpS} min={0} />
+        <input type="number" value={whole} onChange={(e) => set(Math.max(0, +e.target.value), fi)} onFocus={selectOnFocus} style={inpS} min={0} />
         <select value={fi} onChange={(e) => set(whole, +e.target.value)} style={selS}>
           {FRAC16_LABELS.map((l, i) => <option key={i} value={i}>{l === "0" ? "—" : l}</option>)}
         </select>
@@ -627,7 +628,7 @@ function FracInput64({ value, onChange, label, theme }) {
     <div>
       <label style={labS}>{label}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-        <input type="number" value={whole} onChange={(e) => onChange(Math.max(0, +e.target.value) + FRACS64[fi])} style={inpS} min={0} />
+        <input type="number" value={whole} onChange={(e) => onChange(Math.max(0, +e.target.value) + FRACS64[fi])} onFocus={selectOnFocus} style={inpS} min={0} />
         <select value={fi} onChange={(e) => onChange(whole + FRACS64[+e.target.value])} style={selS}>
           {FRAC64_LABELS.map((l, i) => <option key={i} value={i}>{l === "0" ? "—" : l}</option>)}
         </select>
@@ -674,11 +675,11 @@ function CabGroupRow({ grp, groupLabel, onChange, onRemove, canRemove, theme }) 
       <FracInput value={grp.d} onChange={(v) => set("d", v)} label="Depth" theme={theme} min={1} />
       <div>
         <label style={labS}>÷ Cabs</label>
-        <input type="number" value={divide} onChange={(e) => set("qty", Math.max(1, +e.target.value))} style={smallInputS} min={1} max={50} />
+        <input type="number" value={divide} onChange={(e) => set("qty", Math.max(1, +e.target.value))} onFocus={selectOnFocus} style={smallInputS} min={1} max={50} />
       </div>
       <div>
         <label style={labS}>× Sets</label>
-        <input type="number" value={mult} onChange={(e) => set("mult", Math.max(1, +e.target.value))} style={smallInputS} min={1} max={20} />
+        <input type="number" value={mult} onChange={(e) => set("mult", Math.max(1, +e.target.value))} onFocus={selectOnFocus} style={smallInputS} min={1} max={20} />
       </div>
       <div style={{ alignSelf: "flex-end", marginBottom: 4 }}>
         <span style={hintS}>= {divide * mult} cabs</span>
