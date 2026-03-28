@@ -962,7 +962,7 @@ export default function PlywoodCalculator() {
         <div style={{ background: cardBg, borderRadius: 8, padding: "16px 20px", marginBottom: 28, border: isPrintMode ? "1px solid #ddd" : "1px solid #1a3a5c" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: headingColor, fontFamily: fontFam }}>Cabinet Reference</div>
-            <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>Pocket hole · Stock: {nominalSize(stockT)} ({fmtRaw(stockT)}) · Back: {nominalSize(backStockT)} ({fmtRaw(backStockT)}){!isInset ? " (outside)" : " (inset)"}</span>
+            <span style={{ fontSize: 11, color: isPrintMode ? "#888" : "#4a6a8a", fontFamily: fontFam }}>Pocket hole · Stock: {nominalSize(stockT)} ({fmtRaw(stockT)}){fullBack ? ` · Back: ${nominalSize(backStockT)} (${fmtRaw(backStockT)})${!isInset ? " (outside)" : " (inset)"}` : ""}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: cabGroups.length === 1 ? "1fr" : "1fr 1fr", gap: 12 }}>
             {cabGroups.map((grp, gi) => {
