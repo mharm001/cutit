@@ -4,7 +4,7 @@ import { flushSync } from "react-dom";
 const SHEET_W = 96;
 const SHEET_H = 48;
 const DEFAULT_KERF = 0.125;
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 const selectOnFocus = (e) => e.target.select();
 
 // ─── Fraction helpers (1/16 for dims, 1/64 for thickness) ───
@@ -840,7 +840,24 @@ export default function PlywoodCalculator() {
 
   return (
     <div ref={printRef} style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: bg, minHeight: "100vh", padding: "24px 20px", color: textColor }}>
-      <style>{`@media print { body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none !important; } .print-section-break { page-break-before: always; } .print-sheet { break-inside: avoid; page-break-inside: avoid; } } input[type=number]::-webkit-inner-spin-button { opacity: 1; }`}</style>
+      <style>{`
+        @media print {
+          body { background: #fff !important; }
+          .no-print { display: none !important; }
+          .print-section-break { page-break-before: always; }
+          .print-sheet { break-inside: avoid; page-break-inside: avoid; }
+          #root > div { background: #fff !important; color: #333 !important; }
+          #root div { background-color: transparent !important; border-color: #ddd !important; }
+          #root div[style] { color: #333 !important; font-family: -apple-system, sans-serif !important; }
+          #root h1, #root h2, #root h3 { color: #111 !important; }
+          #root span, #root label, #root p { color: inherit !important; }
+          #root svg { background: #fff !important; }
+          #root svg text { font-family: -apple-system, sans-serif !important; }
+          #root input, #root select { background: #fff !important; color: #222 !important; border-color: #ccc !important; }
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+        input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+      `}</style>
 
       <div style={{ maxWidth: 960, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
