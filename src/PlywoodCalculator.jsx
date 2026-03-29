@@ -4,7 +4,7 @@ import { flushSync } from "react-dom";
 const SHEET_W = 96;
 const SHEET_H = 48;
 const DEFAULT_KERF = 0.125;
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 const selectOnFocus = (e) => e.target.select();
 
 // ─── Fraction helpers (1/16 for dims, 1/64 for thickness) ───
