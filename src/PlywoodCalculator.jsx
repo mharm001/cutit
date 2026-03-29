@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { flushSync } from "react-dom";
 
 const SHEET_W = 96;
 const SHEET_H = 48;
@@ -360,7 +361,7 @@ function RipStep({ sheet, sheetNum, scale, theme }) {
 }
 
 // ─── Crosscut Step ───
-function CrosscutStep({ strip, stripLabel, scale, theme, identicalCount }) {
+function CrosscutStep({ strip, stripLabel, scale, theme }) {
   const { isBP, bg, border, dim, fontFam, waste, wasteFill, wasteText, type } = theme;
   const f = fmtDim;
   const usedW = strip.usedLen;
@@ -431,14 +432,6 @@ function CrosscutStep({ strip, stripLabel, scale, theme, identicalCount }) {
 function SheetSteps({ sheet, sheetNum, sheetLabel, scale, theme }) {
   const { heading, fontFam, isBP, card } = theme;
   const sn = sheetLabel ? sheetLabel.replace(/[^0-9]/g, "") || sheetNum : sheetNum;
-  const stripKey = (s) => s.panels.map((p) => `${p.type}:${p.crossDim.toFixed(2)}`).join("|");
-  const groups = [];
-  const seen = {};
-  sheet.strips.forEach((strip, si) => {
-    const key = stripKey(strip);
-    if (seen[key] !== undefined) groups[seen[key]].indices.push(si);
-    else { seen[key] = groups.length; groups.push({ strip, indices: [si] }); }
-  });
 
   return (
     <div className="print-sheet" style={{ background: card, borderRadius: 8, padding: "12px 14px", marginBottom: 16, border: isBP ? "1px solid #1a3a5c" : "1px solid #ddd" }}>
@@ -451,15 +444,14 @@ function SheetSteps({ sheet, sheetNum, sheetLabel, scale, theme }) {
           <div style={{ fontSize: 11, fontWeight: 600, color: heading, fontFamily: fontFam, marginBottom: 4 }}>Step 1 — Rip</div>
           <RipStep sheet={sheet} sheetNum={sn} scale={scale} theme={theme} />
         </div>
-        {groups.map((g, gi) => {
-          const ids = g.indices.map((i) => `${sn}-${String.fromCharCode(65 + i)}`);
-          const stripLabel = ids.join(", ");
+        {sheet.strips.map((strip, si) => {
+          const stripLabel = `${sn}-${String.fromCharCode(65 + si)}`;
           return (
-            <div key={gi}>
+            <div key={si}>
               <div style={{ fontSize: 11, fontWeight: 600, color: heading, fontFamily: fontFam, marginBottom: 4 }}>
-                Step {gi + 2} — Crosscut {stripLabel}
+                Step {si + 2} — Crosscut {stripLabel}
               </div>
-              <CrosscutStep strip={g.strip} stripLabel={stripLabel} scale={scale} theme={theme} identicalCount={g.indices.length} />
+              <CrosscutStep strip={strip} stripLabel={stripLabel} scale={scale} theme={theme} />
             </div>
           );
         })}
@@ -829,8 +821,13 @@ export default function PlywoodCalculator() {
   const { bg, text: textColor, heading: headingColor, accent: accentColor, card: cardBg, fontFam } = theme;
 
   const handlePrint = useCallback(() => {
-    setIsPrintMode(true);
-    setTimeout(() => { window.print(); setTimeout(() => setIsPrintMode(false), 500); }, 200);
+    flushSync(() => setIsPrintMode(true));
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+        setIsPrintMode(false);
+      });
+    });
   }, []);
 
   const inputStyle = { width: 80, padding: "6px 10px", fontSize: 14, background: isPrintMode ? "#fff" : "#111d2e", border: isPrintMode ? "1px solid #ccc" : "1px solid #1a3a5c", borderRadius: 4, color: isPrintMode ? "#222" : "#c0d8f0", fontFamily: fontFam };
