@@ -4,7 +4,7 @@ import { flushSync } from "react-dom";
 const SHEET_W = 96;
 const SHEET_H = 48;
 const DEFAULT_KERF = 0.125;
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.2.0";
 const selectOnFocus = (e) => e.target.select();
 
 // ─── Fraction helpers (1/16 for dims, 1/64 for thickness) ───
@@ -861,9 +861,12 @@ export default function PlywoodCalculator() {
 
       <div style={{ maxWidth: 960, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: headingColor, margin: 0, fontFamily: fontFam }}>Plywood Cut Calculator</h1>
-            <p style={{ fontSize: 13, color: isPrintMode ? "#888" : "#4a6a8a", margin: "4px 0 0", fontFamily: fontFam }}>Tracksaw rip → MFT crosscut workflow</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <img src={`${import.meta.env.BASE_URL}icon-192.png`} alt="CutIt" style={{ width: 40, height: 40, borderRadius: 8 }} />
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: headingColor, margin: 0, fontFamily: fontFam }}>Plywood Cut Calculator</h1>
+              <p style={{ fontSize: 13, color: isPrintMode ? "#888" : "#4a6a8a", margin: "4px 0 0", fontFamily: fontFam }}>Tracksaw rip → MFT crosscut workflow</p>
+            </div>
           </div>
           <button className="no-print" onClick={handlePrint} style={{ padding: "8px 18px", fontSize: 13, fontWeight: 600, background: "none", border: `1px solid ${accentColor}`, borderRadius: 4, color: accentColor, cursor: "pointer", fontFamily: fontFam }}>Print Cut Sheets</button>
         </div>
